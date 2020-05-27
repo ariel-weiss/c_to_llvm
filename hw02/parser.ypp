@@ -1,0 +1,144 @@
+%{
+
+#include <utility>
+
+#include "output.hpp"
+
+
+using namespace std;
+extern int yylineno;
+extern int yylex();
+void yyerror(const char* c);
+
+%}
+
+%right ASSIGN
+%left OR
+%left AND
+%left RELOPB
+%nonassoc RELOPA
+%left BINOPB
+%left BINOPA
+%right NOT
+%left LPAREN
+%left RPAREN
+%token RBRACE
+%token ENUM
+%token VOID
+%token INT
+%token BYTE
+%token B
+%token BOOL
+%token TRUE
+%token FALSE
+%token RETURN
+%nonassoc IF
+%nonassoc ELSE
+%token WHILE
+%token CONTINUE
+%token COMMA
+%token LBRACE
+%token ID
+%token NUM
+%token STRING
+%token BREAK
+%token SC
+
+
+%%
+Program:	Enums Funcs {output::printProductionRule(1);}
+;
+Funcs:	/*epsilon*/ {output::printProductionRule(2);}
+		| FuncDecl Funcs {output::printProductionRule(3);}
+;
+FuncDecl:	RetType ID LPAREN Formals RPAREN LBRACE Statements RBRACE {output::printProductionRule(4);}
+;
+Enums:	/*epsilon*/ {output::printProductionRule(5);}
+		| EnumDecl Enums {output::printProductionRule(6);}
+;
+EnumDecl:	ENUM ID LBRACE EnumeratorList RBRACE SC {output::printProductionRule(7);}
+;
+RetType:	Type {output::printProductionRule(8);}
+			| VOID {output::printProductionRule(9);}
+;
+Formals:	/*epsilon*/ {output::printProductionRule(10);}
+			| FormalsList {output::printProductionRule(11);}
+;
+FormalsList:	FormalDecl {output::printProductionRule(12);}
+				| FormalDecl COMMA FormalsList {output::printProductionRule(13);}
+;
+FormalDecl:		Type ID {output::printProductionRule(14);}
+				| EnumType ID {output::printProductionRule(15);}
+;
+EnumeratorList:		Enumerator {output::printProductionRule(16);}
+					| EnumeratorList COMMA Enumerator {output::printProductionRule(17);}
+;
+Enumerator: 	ID {output::printProductionRule(18);}
+;
+Statements:		Statement {output::printProductionRule(19);}
+				| Statements Statement {output::printProductionRule(20);}
+;
+Statement:		LBRACE Statements RBRACE {output::printProductionRule(21);}
+				| Type ID SC {output::printProductionRule(22);}
+				| EnumType ID SC {output::printProductionRule(23);}
+				| EnumDecl {output::printProductionRule(24);}
+				| Type ID ASSIGN Exp SC {output::printProductionRule(25);}
+				| EnumType ID ASSIGN Exp SC {output::printProductionRule(26);}
+				| ID ASSIGN Exp SC {output::printProductionRule(27);}
+				| Call SC {output::printProductionRule(28);}
+				| RETURN SC {output::printProductionRule(29);}
+				| RETURN Exp SC {output::printProductionRule(30);}
+				| IF LPAREN Exp RPAREN Statement {output::printProductionRule(31);}
+				| IF LPAREN Exp RPAREN Statement ELSE Statement {output::printProductionRule(32);}
+				| WHILE LPAREN Exp RPAREN Statement {output::printProductionRule(33);}
+				| BREAK SC {output::printProductionRule(34);}
+				| CONTINUE SC {output::printProductionRule(35);}
+;
+Call:		ID LPAREN ExpList RPAREN {output::printProductionRule(36);}
+			| ID LPAREN RPAREN {output::printProductionRule(37);}
+;
+ExpList:	Exp {output::printProductionRule(38);}
+			| Exp COMMA ExpList {output::printProductionRule(39);}
+;
+Type:		INT {output::printProductionRule(40);}
+			| BYTE {output::printProductionRule(41);}
+			| BOOL {output::printProductionRule(42);}
+;
+EnumType:	ENUM ID {output::printProductionRule(43);}
+;
+Exp:	LPAREN Exp RPAREN {output::printProductionRule(44);}
+		| Exp BINOPA Exp {output::printProductionRule(45);}
+		| Exp BINOPB Exp {output::printProductionRule(45);}
+		| ID {output::printProductionRule(46);}
+		| Call {output::printProductionRule(47);}
+		| NUM {output::printProductionRule(48);}
+		| NUM B {output::printProductionRule(49);}
+		| STRING {output::printProductionRule(50);}
+		| TRUE {output::printProductionRule(51);}
+		| FALSE {output::printProductionRule(52);}
+		| NOT Exp {output::printProductionRule(53);}
+		| Exp AND Exp {output::printProductionRule(54);}
+		| Exp OR Exp {output::printProductionRule(55);}
+		| Exp RELOPA Exp {output::printProductionRule(56);}
+		| Exp RELOPB Exp {output::printProductionRule(56);}
+		| LPAREN Type RPAREN Exp {output::printProductionRule(57);}
+;
+
+
+
+
+
+
+
+%%
+
+int main()
+{
+
+    return yyparse();
+}
+
+void yyerror(const char* c) {
+	output::errorSyn(yylineno);
+	exit(0);
+}
