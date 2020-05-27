@@ -1,0 +1,2 @@
+1. What happens if we receive a bad ID/NUM etc'? should we print an error, or extract the correct one from it?
+for example: 050 should be 0 and then 50 or 050?
