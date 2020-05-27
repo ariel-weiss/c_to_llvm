@@ -1,0 +1,334 @@
+%{
+
+#include <utility>
+#include <stack>
+#include "hw3_output.hpp"
+#include "SymbolTable.h"
+
+using namespace std;
+extern int yylineno;
+extern int yylex();
+void yyerror(const char* c);
+void endScope();
+
+TablesStack tables;
+
+%}
+
+%right ASSIGN
+%left OR
+%left AND
+%left RELOPB
+%nonassoc RELOPA
+%left BINOPB
+%left BINOPA
+%right NOT
+%left LPAREN
+%left RPAREN
+%token RBRACE
+%token ENUM
+%token VOID
+%token INT
+%token BYTE
+%token B
+%token BOOL
+%token TRUE
+%token FALSE
+%token RETURN
+%nonassoc IF
+%nonassoc ELSE
+%token WHILE
+%token CONTINUE
+%token COMMA
+%token LBRACE
+%token ID
+%token NUM
+%token STRING
+%token BREAK
+%token SC
+
+
+%%
+
+Program:	PRE_PROG Enums Funcs {
+     tables.CheckForMain();
+     output::endScope();
+     endScope();
+     exit(0);
+    ;}
+;
+PRE_PROG: {
+    SymbolTable* table = new SymbolTable();
+    Function* print = new Function("print","VOID","STRING");
+    Function* printi = new Function("printi","VOID","INT");
+    table->insert(print);
+    table->insert(printi);
+	tables.push(table);
+};
+Funcs:	/*epsilon*/ {}
+		| FuncDecl Funcs {}
+;
+FuncDecl:	RetType ID LPAREN { tables.pushNewWithOffset(0); }Formals RPAREN {
+                tables.verifyVarNotDefined($2->_name,yylineno);
+            } LBRACE {
+
+			    tables.top()->_retType = $1->_type; //Scope belongs to a function with retType.
+			    tables.verifyVarNotDefined($2->_name,yylineno);
+                Formalslist* fl = dynamic_cast<Formalslist*>($5);
+                Function* f = new Function($2->_name,$1->_type,fl->_params);
+                tables.insertToSecond(f);
+			} Statements RBRACE {
+                output::endScope();
+                endScope();
+            }
+;
+
+Enums:	/*epsilon*/ {}
+		| EnumDecl Enums {}
+;
+EnumDecl:	ENUM ID {
+                tables.verifyVarNotDefined($2->_name,yylineno);
+                STEntry* temp = new STEntry($2->_name,$2->_type);
+                tables.insertToTop(temp);
+            }LBRACE EnumeratorList RBRACE SC {
+
+                EnumeratorList* elst = dynamic_cast<EnumeratorList*>($5);
+                EnumType* e = new EnumType($2->_name, elst->_enumerators);
+                tables.popFromTop();
+                tables.insertToTop(e);
+            }
+;
+RetType:	Type {$$ = $1;}
+			| VOID {$$ = new STEntry("n/a","VOID");}
+;
+Formals:	/*epsilon*/ {$$ = new Formalslist();}
+			| FormalsList {
+			Formalslist* lst = dynamic_cast<Formalslist*>($1);
+			int len = lst->_params.size();
+			tables.top()->updateOffsetsRange(len);
+			$$ = $1;
+			}
+;
+FormalsList:	FormalDecl {
+			Formalslist* fl = new Formalslist();
+			STEntry* x = new STEntry($1->_name,$1->_type);
+			fl->pushArg(x->_type);
+			tables.insertToTop(x); //Offset will be handeled later
+			$$ = fl;
+			}
+			| FormalDecl {
+                        STEntry* x = new STEntry($1->_name,$1->_type);
+                        tables.insertToTop(x);
+                        } COMMA FormalsList {
+			Formalslist* fl = dynamic_cast<Formalslist*>($4);
+			/* assuming fl isn't NULL */
+			fl->pushArg($1->_type);
+			$$ = fl;
+			}
+;
+FormalDecl:		Type ID {
+			tables.verifyVarNotDefined($2->_name,yylineno);
+			$$ = new STEntry($2->_name,$1->_type);
+			}
+				| EnumType ID {
+			//tables.verifyEnumTypeDef($1->_name,yylineno);
+			tables.verifyVarNotDefined($2->_name,yylineno);
+			$$ = new STEntry($2->_name,$1->_type);
+			}
+;
+EnumeratorList:		Enumerator { /* Actually gives ID */
+				EnumeratorList* el = new EnumeratorList();
+				//STEntry* x = new STEntry($1->_name,"n/a");/* =$1 */
+//tables.insertToTop(x); TODO: Might not be cool. need not to print! //
+				el->push($1->_name,yylineno);//Push and check if already exists
+				$$ = el;
+				}
+				| EnumeratorList COMMA Enumerator {
+				EnumeratorList* el = dynamic_cast<EnumeratorList*>($1);
+				/* assuming el isn't NULL */
+				//STEntry* x = new STEntry($3->_name,"n/a");/* =$3 */
+				el->push($3->_name,yylineno);//Push and check if already exists
+				//tables.insertToTop(x);
+				$$ = el;
+				}
+;
+Enumerator: 	ID {
+				tables.verifyVarNotDefined($1->_name,yylineno);
+				$$ = new STEntry($1->_name,"ENUMERATOR");
+				}
+;
+Statements:		Statement {}
+				| Statements Statement {}
+;
+Statement:		LBRACE NEW_SCOPE Statements END_SCOPE RBRACE {;}
+				| Type ID SC {
+                tables.verifyVarNotDefined($2->_name,yylineno);
+                STEntry* ste = new STEntry($2->_name,$1->_type);
+                tables.insertToTop(ste);
+				}
+				| EnumType ID SC {
+                //tables.verifyEnumTypeDef($1->_name,yylineno);
+                tables.verifyVarNotDefined($2->_name,yylineno);//Verify enum<id> id isn't defined?
+				STEntry* ste = new STEntry($2->_name,$1->_type);
+				tables.insertToTop(ste);
+				}
+				| EnumDecl {/* TODO: Handle enums here? */}
+				| Type ID ASSIGN Exp SC {
+                tables.verifyVarNotDefined($2->_name,yylineno);
+                tables.verifyVarDef($4->_name,yylineno,($4->_isFunc || !$4->_isId));
+                tables.checkVarsTypes($1->_type,$4->_type,yylineno);
+                STEntry* ste = new STEntry($2->_name,$1->_type);
+                tables.insertToTop(ste);
+				}
+				| EnumType ID ASSIGN Exp SC {
+
+                    EnumType* et = dynamic_cast<EnumType*>($1);
+                    et = tables.getEnumTypeFromTable(et->_name,yylineno);
+					tables.verifyVarDef($4->_name,yylineno,($4->_isFunc || !$4->_isId));
+                    tables.checkEnumeratorAssign(et,$4->_name,$2->_name,yylineno);
+                    tables.verifyVarNotDefined($2->_name,yylineno);
+                    tables.checkVarsTypes($1->_type,$4->_type,yylineno);//Maybe redundent!
+					tables.verifyVarYesDefined($4->_name,yylineno);//TODO: NOTE: ONLY ENUMERATORS
+
+
+                    STEntry* ste = new STEntry($2->_name,et->_type);
+                    tables.insertToTop(ste);
+                }
+				| ID ASSIGN Exp SC {
+                tables.verifyItIsVar($1->_name,yylineno);
+                tables.checkVarsImplicitTypes($1->_name,$3->_type,yylineno);
+                //STEntry* ste = new STEntry($2->_name,$1->_type);
+                //tables.insertToTop(ste);
+				}
+				| Call SC {/* Nothing to do here */}
+				| RETURN SC {
+                tables.checkLastReturn("EMPTY",yylineno);
+				}
+				| RETURN Exp SC {
+                tables.checkLastReturn($2->_type,yylineno);
+                }
+				| IF LPAREN VALID_BOOL_EXP RPAREN STATEMENT_IN_SCOPE {}
+				| IF LPAREN VALID_BOOL_EXP RPAREN STATEMENT_IN_SCOPE ELSE STATEMENT_IN_SCOPE{}
+				| WHILE LPAREN VALID_BOOL_EXP RPAREN STATEMENT_IN_WHILE
+				| BREAK SC {tables.checkBreak(yylineno);}
+				| CONTINUE SC {tables.checkContinue(yylineno);}
+;
+
+Call:		ID LPAREN ExpList RPAREN {
+				Function* func = tables.getFunctionFromCall($1->_name,yylineno);
+				Explist* explst = dynamic_cast<Explist*>($3);
+				func->checkArguments(explst,yylineno);
+				STEntry* exp = new STEntry($1->_name,func->_type);
+				exp->_isFunc=true;
+				//$$->_type = func->_type;
+				$$ = exp;
+				}
+			| ID LPAREN RPAREN {
+				Function* func = tables.getFunctionFromCall($1->_name,yylineno);
+				func->checkArguments(nullptr,yylineno);
+				STEntry* exp = new STEntry($1->_name,func->_type);
+                exp->_isFunc=true;
+				//$$->_type = func->_type;
+				$$ = exp;
+				}
+;
+ExpList:    Exp {
+				Explist *explst = new Explist();
+				explst->_exps.push_back($1);
+				$$ = explst;
+				}
+			|Exp COMMA ExpList	{
+				Explist *explst = dynamic_cast<Explist*>($3);
+				explst->_exps.push_back($1);
+				$$ = explst;
+				}
+;
+Type:		INT {$$ = new Num("INT");}
+			| BYTE {$$ = new Num("BYTE");}
+			| BOOL {$$ = new Bool();}
+;
+EnumType:	ENUM ID {
+			//TODO: Need to verify enum<id> type exist.
+                //tables.verifyVarYesDefined($2->_name,yylineno,Enum);
+                tables.verifyEnumTypeDef($2->_name,yylineno);
+				$$ = new EnumType($2->_name);
+			}
+;
+Exp:	LPAREN Exp RPAREN {$$ = $2;}
+		| Exp BINOPA Exp {$$ = new Binop($1,$3,yylineno);}
+		| Exp BINOPB Exp {$$ = new Binop($1,$3,yylineno);}
+		| ID {
+            tables.verifyVarYesDefined($1->_name,yylineno);
+			STEntry* ste = tables.findInTables($1->_name);//TODO: IF enumerator, Retrive also!
+			STEntry* exp = new STEntry(ste->_name,ste->_type); /* TODO: Why new? */
+			//Exp* exp = new Exp(ste->_name,ste->_type,"ID");
+			exp->_isId=true;
+			$$ = exp;
+        }
+		| Call { $$ = $1; }
+		| NUM {
+			Num *num = dynamic_cast<Num*>($1);
+			$$ = new Num(*num); //INT by default
+		}
+		| NUM B {
+			Num *num = dynamic_cast<Num*>($1);
+			if(num->_val > 255){
+				output::errorByteTooLarge(yylineno, num->_sval);
+				exit(0);
+			}
+			num->_type = "BYTE"; //INT by default
+			$$ = new Num(*num);
+		}
+		| STRING { $$ = $1; }
+		| TRUE {$$ = $1;}
+		| FALSE {$$ = $1;}
+		| NOT Exp {$$ = new Not($2,yylineno);}
+		| Exp AND Exp { $$ = new LogicOp($1,$3,yylineno); }
+		| Exp OR Exp { $$ = new LogicOp($1,$3,yylineno); }
+		| Exp RELOPA Exp { $$ = new Relop($1,$3,yylineno); }
+		| Exp RELOPB Exp { $$ = new Relop($1,$3,yylineno); }
+		| LPAREN Type RPAREN Exp {
+			tables.checkVarsTypes("INT",$2->_type,yylineno);
+			tables.checkVarsTypes("ENUM_TYPE",$4->_type,yylineno);
+			$$ = new STEntry($4->_name,"INT");
+		}
+;
+
+
+/* Markers for If/While statements */
+
+VALID_BOOL_EXP: Exp {
+if($1->_type != "BOOL"){
+output::errorMismatch(yylineno);
+exit(0);
+}
+};
+STATEMENT_IN_SCOPE: NEW_SCOPE Statement END_SCOPE{}
+STATEMENT_IN_WHILE: NEW_SCOPE {tables.enterWhile();} Statement {tables.exitWhile();} END_SCOPE{}
+;
+NEW_SCOPE: {
+tables.pushNew();
+};
+END_SCOPE: {
+output::endScope();
+endScope();
+};
+
+
+%%
+
+int main()
+{
+
+    return yyparse();
+}
+
+void yyerror(const char* c) {
+	output::errorSyn(yylineno);
+	exit(0);
+}
+
+void endScope(){
+	tables.printCurrentTabel();
+	tables.pop();
+}

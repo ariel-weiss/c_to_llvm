@@ -1,0 +1,20 @@
+enum day {SUNDAY, MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATARDAY};
+
+int enumParam(enum day d){
+    return (int) d;
+}
+
+int return6() {
+    enum month {Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec}; 
+    return 6;
+}
+
+void main() {
+    bool c = true;
+    if (not c) {
+        int x = 6;
+        printi(x);
+    }
+    else
+        syntax error;
+}

@@ -1,0 +1,8 @@
+---end scope---
+d enum day -1
+---end scope---
+enum month {Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec}
+---end scope---
+x INT 1
+---end scope---
+line 19: syntax error
